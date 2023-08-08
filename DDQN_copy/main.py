@@ -19,13 +19,25 @@ import re
 import numpy as np
 import copy
 
+# 環境參數
+running_time = 184
+# 超參數
+EPISODES = 500
+EPS_START = 0.9  # 隨機選擇行動的概率
+EPS_END = 0
+EPS_DECAY = EPISODES*0.25  # epsilon 衰減的速度
+GAMMA = 0.98  # 折扣因子
+LR = 0.001  # 學習率
+MEMORY_SIZE = 10000  # 經驗回放的記憶體大小
+BATCH_SIZE = 128  # 訓練批次的大小
+
 # # 讀取Raw資料
 def loadCsvFileToDict(filename, ueid):
     # 读取CSV文件
     data = pd.read_csv(filename)
 
     headers = data.columns.tolist()
-    # print("headers in cell csv = ",headers)
+    # # print("headers in cell csv = ",headers)
 
     data_dict = {header: [] for header in headers}
 
@@ -44,24 +56,24 @@ def loadCsvFileToDict(filename, ueid):
             elif re.match(r'^[-+]?\d*\.?\d*$', str(value)):
                 data_dict[header].append(float(value))
             elif re.match(r'^S.*$', str(value)):
-                # print(value)
+                # # print(value)
                 data_dict[header].append(int(value[1]))
             # else :
-            #     print(row)
-            #     print("loadCsvFileToDict have an unknown value : ", value)
+            #     # print(row)
+            #     # print("loadCsvFileToDict have an unknown value : ", value)
 
     # Access the processed data
     # for header, values in data_dict.items():
-    #     print(header, values)
+    #     # print(header, values)
 
-    #print("example to show clown [Viavi.Geo.x] = ",data['Viavi.Geo.x'])
-    print("load " + filename + " successed")
-    print("************")
+    ## print("example to show clown [Viavi.Geo.x] = ",data['Viavi.Geo.x'])
+    # print("load " + filename + " successed")
+    # print("************")
     return data_dict
 
 # label handover的資料
 def handoverDetect(Timestamp, ServingCellId):
-    print("****** function: handoverDetect ******")
+    # print("****** function: handoverDetect ******")
     merged_list = [Timestamp, ServingCellId]
 
     # 创建与原始列表相同的副本列表
@@ -78,13 +90,13 @@ def handoverDetect(Timestamp, ServingCellId):
         "Handover" : handover_list[1],
     }
     
-    print("handover label finish")
-    print("************")
+    # print("handover label finish")
+    # print("************")
     return handover_dict
 
 # Raw資料轉換，擷取time、cell_ID、cell_RSRP資料
 def PrepareInput(ue_data):
-    print("****** function: PrepareInput ******")
+    # print("****** function: PrepareInput ******")
     unmerge_data = {
         "Timestamp" : ue_data['Timestamp'],
         "ServingCellId": ue_data['ServingCellId'],
@@ -107,10 +119,10 @@ def PrepareInput(ue_data):
         #"neighbourCell5RsSinr": ue_data['neighbourCell5RsSinr'],
     }
     unmerge_data_list = list(unmerge_data.items())
-    # print(unmerge_data_list)
-    # print(unmerge_data_list[1][0])
-    # print(unmerge_data_list[1][1])
-    # print(unmerge_data_list[1][1][1])
+    # # print(unmerge_data_list)
+    # # print(unmerge_data_list[1][0])
+    # # print(unmerge_data_list[1][1])
+    # # print(unmerge_data_list[1][1][1])
     serving_cell_id = unmerge_data_list[1][1]
 
     time = unmerge_data_list[0][1]
@@ -127,11 +139,11 @@ def PrepareInput(ue_data):
             cell_num_temp = unmerge_data_list[cell_num][1][time]
             cell_rsrp[time][cell_num_temp - 1] = unmerge_data_list[cell_num + 1][1][time]
             
-    # print(cell_id)
+    # # print(cell_id)
 
     # 處理重複點
     zero_points = np.argwhere(cell_rsrp == 0)
-    # print(zero_points)
+    # # print(zero_points)
     for zero_points_index in range(len(zero_points)-2):
         time = zero_points[zero_points_index][0]
         cell = zero_points[zero_points_index][1]
@@ -148,130 +160,24 @@ def PrepareInput(ue_data):
         if(abs(avg_neighbor - consider_future_two_point) < 12):
             cell_rsrp[time][cell] = consider_future_two_point
     
-    print("************")
+    # print("************")
     return time, cell_id, cell_rsrp, serving_cell_id
 
 # 取得基站的放置位置
 def getGnbLocation(cell_data):
-    print("****** function: getGnbLocation ******")
+    # print("****** function: getGnbLocation ******")
     cell_x = cell_data["Viavi.Geo.x"]
     cell_y = cell_data["Viavi.Geo.y"]
     cell_ngi = cell_data["Viavi.NrPci"]
     # 去除重复的点
     gnb_location_temp = list(set(zip(cell_x, cell_y, cell_ngi)))
     # 输出去重后的点
-    # print(gnb_location)
+    # # print(gnb_location)
     gnb_location = [list(t) for t in gnb_location_temp]
     
-    print("successfully get gnb location")
-    print("************")
+    # print("successfully get gnb location")
+    # print("************")
     return gnb_location
-
-
-ue_csv_file = 'output_ue.csv'
-ue_data = loadCsvFileToDict(ue_csv_file, 2)
-handover_label = handoverDetect(ue_data['Timestamp'], ue_data['ServingCellId'])
-time, cell_id, cell_rsrp, serving_cell_id = PrepareInput(ue_data)
-# state資料處理?
-normalized_cell_rsrp = cell_rsrp / np.linalg.norm(cell_rsrp, axis=1, keepdims=True)
-state_data = cell_rsrp
-# state_data = normalized_cell_rsrp
-print(len(state_data))
-print(len(state_data[0]))
-print(state_data[0])
-
-# 自訂環境
-class CustomEnv(gym.Env):
-    def __init__(self, time=running_time, num_cells=6, state_data=state_data):
-        super(CustomEnv, self).__init__()
-        
-        self.time = time
-        self.num_cells = num_cells
-        self.state_data = state_data
-        self.handover_num = 0
-        self.unhandover_stack = 0
-        self.tol_reward = 0
-
-        self.action_space = spaces.Discrete(num_cells)
-        self.observation_space = spaces.Discrete(num_cells)
-        
-        # Initialize state
-        self.state = state_data[0]
-
-        # Initialize the map (Randomly for this example, you can replace this with your own logic)
-        self.map = state_data[:time]
-
-    def step(self, action, timestamps, last_action):
-                
-        rsrp_values = self.state
-        action = int(action)
-        # print("action = ", action)
-        selected_value = rsrp_values[action]
-        prb_tot_dl_value = self.get_prb_tot_dl_value(action)  # Get the RRU.PrbTotDl value for the selected action
-        
-
-        # reward
-        if (last_action == action) : 
-            unhandover_reward = self.calculate_unhandover_reward()
-            state_reward = selected_value - np.max(rsrp_values) + unhandover_reward - prb_tot_dl_value  # Subtract the PrbTotDl value from the reward
-            # print(state_reward)
-            self.tol_reward = self.tol_reward + state_reward
-        else :
-            handover_cost = self.calculate_handover_cost()  # Calculate the cost based on the frequency of handovers
-            state_reward = selected_value - np.max(rsrp_values) - handover_cost - prb_tot_dl_value  # Subtract the PrbTotDl value and the handover cost from the reward
-            # print(state_reward)
-            self.tol_reward = self.tol_reward + state_reward
-            self.handover_num = self.handover_num + 1
-        # print("handover_num = ", self.handover_num)
-        # print("state_reward = ", state_reward)
-        # Move to the next point
-        if timestamps + 1 < self.time:
-            next_point_idx = timestamps + 1
-            next_state = self.map[next_point_idx]
-            # print(next_state)
-        else:  # End of the map
-            next_point_idx = timestamps
-            next_state = self.state  # Remain at the current point
-
-        self.state = next_state
-
-        done = bool(next_point_idx == self.time-1)
-
-        return self.state, self.tol_reward, done, self.handover_num
-    
-    def calculate_unhandover_reward(self):
-        # rise at x = 10, and slowly decrease to zero when x = 60
-        self.unhandover_stack = self.unhandover_stack + 1
-        reward_decay = 5*self.unhandover_stack * np.exp(-1. * self.unhandover_stack / 10)
-        # print(reward_decay)
-        return reward_decay
-        # reward_decay = np.exp(-1. * self.unhandover_stack / 5)
-        # self.unhandover_stack = self.unhandover_stack + reward_decay
-        # return self.unhandover_stack
-
-    def calculate_handover_cost(self):
-    # The cost of handovers is simply the number of handovers.
-    # We add 1 to the handover number to ensure that the first handover also has a cost.
-        # return 2 ** (self.handover_num + 1)
-        self.unhandover_stack = 0
-        return 20
-    
-    def get_prb_tot_dl_value(self, action):
-    # This function should return the RRU.PrbTotDl value for the given action.
-    # You need to implement this function based on your data structure.
-        return 0    
-
-    def reset(self):
-        # Set the state to the first point
-        self.handover_num = 0
-        self.unhandover_stack = 0
-        self.tol_reward = 0
-        self.state = self.map[0]
-        return self.state
-
-    def render(self, mode='human'):
-        # 環境的渲染，這裡簡單地打印出當前步數
-        print(f"Current reward: {self.tol_reward}")
 
 # model
 class DQN(nn.Module):
@@ -287,107 +193,23 @@ class DQN(nn.Module):
         x = self.fc3(x)
         return x
 
-# ddqn agent
-class DoubleDQNAgent:
-    def __init__(self):
-        self.model = DQN().to(device)
-        self.target_model = DQN().to(device)
-        self.update_target_model()
-        self.memory = deque(maxlen=MEMORY_SIZE)
-        self.optimizer = optim.Adam(self.model.parameters(), LR)
-        self.steps_done = 0
-        self.random_num = 0
-        self.greedy_num = 0
-
-    def update_target_model(self):
-        self.target_model.load_state_dict(self.model.state_dict())
-
-    def memorize(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-
-    def act(self, state):
-        model_state = Variable(state.cpu()).unsqueeze(0) # 將state以CPU計算
-        
-        eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-            np.exp(-1. * self.steps_done / EPS_DECAY)    # end + (start - end)*e^-(t/EPS_DECAY)
-        # 找出3個最大的RSRP所對應的state
-        state_temp = state[0]
-        top_two_indices = sorted(range(len(state_temp)), key=lambda i:  state_temp[i], reverse=True)[:3]
-        # print(top_two_indices)
-
-        # random
-        if np.random.rand() <= eps_threshold:
-            action_value = self.target_model.forward(model_state.to(device)) 
-            action = random.choice(top_two_indices)
-            self.random_num = self.random_num + 1
-            # print("top_two_indices = ", top_two_indices)
-
-        # greedy 
-        else:
-            action_value = self.target_model.forward(model_state.to(device))  # 注意將 model_state 轉移到 GPU
-            # print("action_value = ", action_value)
-            top_indices = torch.topk(action_value, k=1)[1].flatten()
-            top_indices_np = top_indices.cpu().numpy()
-            action = top_indices_np[0]
-            self.greedy_num = self.greedy_num + 1
-        # print("action in act", action)
-        return action
-
-    def replay(self):
-        if len(self.memory) < BATCH_SIZE:
-            return
-        batch = random.sample(self.memory, BATCH_SIZE)
-        for state, action, reward, next_state, done in batch:
-            state = Variable(state).to(device)
-            next_state = Variable(next_state).to(device)
-            reward = torch.from_numpy(np.array([reward], dtype=np.float32)).unsqueeze(0).to(device)
-            done = torch.from_numpy(np.array([done], dtype=np.int32)).unsqueeze(0).to(device)
-
-            q_values = self.model(state)
-            next_q_values = self.model(next_state)
-            next_q_state_values = self.target_model(next_state)
-
-            q_value = q_values.gather(1, torch.LongTensor([[action]]).to(device))
-            next_q_value = next_q_state_values.gather(1, torch.max(next_q_values, 1)[1].unsqueeze(1))
-            expected_q_value = reward + GAMMA * next_q_value * (1 - done)
-
-            loss = nn.MSELoss()(q_value, expected_q_value.detach())
-
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            
-    def reset(self):
-        print("greedy_num = ", self.greedy_num)
-        self.greedy_num = 0
-        print("random_num = ", self.random_num)
-        self.random_num = 0
-        self.steps_done += 1
-        
-    def predict_act(self, state):
-        # model_state = Variable(state.cpu()).unsqueeze(0)
-        # action_value = self.model.forward(model_state.to(device))  # model_state 放到 GPU
-        action_value = self.target_model.forward(state)  # model_state 放到 GPU
-        print("action_value = ", action_value)
-        top_indices = torch.topk(action_value, k=1)[1].flatten()
-        # print("top_indices = ", top_indices)
-        top_indices_np = top_indices.cpu().numpy()
-        action = top_indices_np[0]
-        return action
-    
 # inference predict function
-def predict_act(agent_inference, state):
-        action_value = agent_inference.forward(state)  # state 放到 NN 裡
-        top_indices = torch.topk(action_value, k=1)[1].flatten() # 從6個ouput中找最大值
-        top_indices_np = top_indices.numpy()    # 轉成numpy
-        action = top_indices_np[0]
-        return action
-    
-# 開始Inference
+def predict_act(model, state):
+    action_value = model.forward(state)  # state 放到 NN 裡
+    top_indices = torch.topk(action_value, k=1)[1].flatten() # 從6個ouput中找最大值
+    top_indices_np = top_indices.numpy()    # 轉成numpy
+    action = top_indices_np[0]
+    return action
 
+#############################################
+############### 開始Inference ###############
+#############################################
 # 載入NN及權重
-agent_inference = DQN()
-agent_inference.load_state_dict(torch.load('ddqn_model_weights_epsiode1000_-500_v2.pth')) 
+def load_model(ue_num):
+    model = DQN()
+    model_num = f'model/ddqn_model_ue{ue_num + 1}.pth'
+    model.load_state_dict(torch.load(model_num, map_location=torch.device('cpu')))
+    return model
 
 # 區域變數
 action_store = [[0] for _ in range(9)]
@@ -395,9 +217,12 @@ time_store = [[0] for _ in range(9)]
 handover_store = [[0] for _ in range(9)]
 serving_cell = [[0] for _ in range(9)]
 cell_one_round = [282, 184, 264, 184, 180, 115, 184, 184, 174]
+ue_csv_file = 'output_ue.csv'
 
+print("loading data and predict......")
 # Inference
 for ue_num in range(0,9) :
+    model = load_model(ue_num)
     # 讀取CSV資料
     ue_data_temp = loadCsvFileToDict(ue_csv_file, ue_num + 1) # cell id 由1到9
     time_store[ue_num], _, cell_rsrp_temp, serving_cell[ue_num] = PrepareInput(ue_data_temp)
@@ -408,22 +233,22 @@ for ue_num in range(0,9) :
     for i in range(len(cell_rsrp_temp[:cell_one_round[ue_num]])):
         state = cell_rsrp_temp[i]
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        # predicted_action = agent_inference.forward(state) 
-        predicted_action = predict_act(agent_inference, state)
-        if(i ==0):
-            print("init state = ", predicted_action)
+        # predicted_action = model.forward(state) 
+        predicted_action = predict_act(model, state)
+        # if(i ==0):
+            # print("init state = ", predicted_action)
         action_store[ue_num].append(predicted_action + 1)
 
-    print(f"ue {ue_num + 1} finish predict")
+    # print(f"ue {ue_num + 1} finish predict")
     
     # 顯示結果
     handover_store[ue_num] = handoverDetect(time_store[ue_num], action_store[ue_num])
-    print(f"ue {ue_num + 1} model handover          =  {handover_store[ue_num]['Handover']}")
-    print(f"ue {ue_num + 1} model action            =  {action_store[ue_num]}")
-    print(f"ue {ue_num + 1} original serving_cell   =  {serving_cell[ue_num][:cell_one_round[ue_num]]}")
+    # print(f"ue {ue_num + 1} model handover          =  {handover_store[ue_num]['Handover']}")
+    # print(f"ue {ue_num + 1} model action            =  {action_store[ue_num]}")
+    # print(f"ue {ue_num + 1} original serving_cell   =  {serving_cell[ue_num][:cell_one_round[ue_num]]}")
     
-    print("handover seconds             = ", np.nonzero(handover_store[ue_num]['Handover']))
-
+    # print("handover seconds             = ", np.nonzero(handover_store[ue_num]['Handover']))
+print("predict finish")
 # load csv data
 ue_csv_file = 'output_ue.csv'
 cell_csv_file = 'cells_05_15.csv'
@@ -432,8 +257,8 @@ ue_location = []
 
 for ue_id in range(1,10):
     ue_data = loadCsvFileToDict(ue_csv_file, ue_id)
-    # print("ue_data timestamps= ", len(ue_data['Timestamp']))
-    # print("ue_data columns = ", len(ue_data))
+    # # print("ue_data timestamps= ", len(ue_data['Timestamp']))
+    # # print("ue_data columns = ", len(ue_data))
     # 9*3*4000的list
     handover_label = handoverDetect(ue_data['Timestamp'], ue_data['ServingCellId'])
     ue_location.append([ue_data['Timestamp'], ue_data['X'], ue_data['Y'], handover_label['Handover']])
@@ -446,16 +271,15 @@ import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import os
 from IPython.display import clear_output
 
 # DisplayPicture class
 class DisplayPicture:
-    def __init__(self, cell_one_round, cell_location):
+    def __init__(self, cell_location):
         # external parameter
         self.cell_location = cell_location
-        
+        self.collect_list = []
         # class generate
         self.fig, self.ax = plt.subplots(figsize=(12, 6))
         self.picture_num = 0
@@ -480,29 +304,24 @@ class DisplayPicture:
             circle = Circle((cell_x, cell_y), 100, edgecolor='red', facecolor='none')
             self.ax.add_patch(circle)
 
-    def update_fig(self, i):
-        plt.clf()  # clear current figure
+    def display_part_and_save(self):
+        clear_output(wait=True)
+        
         self.picture_num = self.picture_num + 1
         self.addition_label()
 
         plt.grid()
-
-    # def display_part_and_save(self):
-    #     clear_output(wait=True)
-        
-    #     self.picture_num = self.picture_num + 1
-    #     self.addition_label()
-
-    #     plt.grid()
-    #     plt.show()
-    #     # 設定檔名、位置，並儲存
-    #     file_name = f"plot_picture{self.picture_num}.png"
-    #     file_path = os.path.join("picture", file_name)
-    #     self.fig.savefig(file_path, dpi=300)
-    #     # 清除圖片
-    #     # time.sleep(0.1)
+        plt.show()
+        # 設定檔名、位置，並儲存
+        file_name = f"plot_picture{self.picture_num}.png"
+        file_path = os.path.join("picture", file_name)
+        self.fig.savefig(file_path, dpi=300)
+        # 清除圖片
+        # time.sleep(0.1)
     
     def pre_display_data(self, ue_num, handover_data, x, y, cell_one_round, color_map, first_time):
+        A3_handover_num = 0
+        model_handover_num = 0
         color = color_map[ue_num]
         if first_time:
             line, = self.ax.plot(x, y, color=color, label=f'Ue {ue_num}')
@@ -513,8 +332,12 @@ class DisplayPicture:
         for j in range(cell_one_round):
             if handover_data[j] == 1:
                 self.ax.scatter(x[j], y[j], color='orange', marker='x', s=100)
+                A3_handover_num = A3_handover_num + 1
             if handover_store[ue_num-1]['Handover'][j] == 1 and j > 2: # ue從1開始到9，所以要-1
                 self.ax.scatter(x[j], y[j], facecolors='none', edgecolors='blue', marker='o', s=100)
+                model_handover_num = model_handover_num + 1
+        # print(f"ue {i + 1}, A3 handover number = {A3_handover_num}, model handover number = {model_handover_num}")
+        self.collect_list.append([A3_handover_num, model_handover_num])
         
     def addition_label(self):
         legend_elements = [
@@ -526,13 +349,36 @@ class DisplayPicture:
         labels = ['Handover', 'model Handover'] + existing_labels
 
         self.ax.legend(handles=legend_elements, labels=labels)
+    
+    def hanover_calculate(self):
         
-    def animate(self):
-        ani = animation.FuncAnimation(self.fig, self.update_fig, interval=1000)  # update every 1000ms (1s)
+        clear_output(wait=True)
+        # 将数据分解为两个单独的列表
+        heights, widths = zip(*self.collect_list)
+        # y轴的位置
+        y_values = np.arange(9)
+        # 长条的宽度
+        bar_width = 0.35
+        # 创建一个新的figure对象
+        fig, ax = plt.subplots()
+        # 创建两个横条图
+        bar1 = ax.barh(y_values + bar_width, widths, bar_width, label='model handover number')
+        bar2 = ax.barh(y_values, heights, bar_width, label='A3 handover number')
+        # 设置y轴的刻度和刻度标签
+        ax.set_yticks(y_values + bar_width / 2)
+        labels = ['ue' + str(i+1) for i in range(9)]
+        ax.set_yticklabels(labels)
+        # 添加图例
+        ax.legend()
+        # 显示图形
         plt.show()
+        # 設定檔名、位置，並儲存
+        file_name = f"plot_picture{self.picture_num}.png"
+        file_path = os.path.join("picture", file_name)
+        self.fig.savefig(file_path, dpi=300)
         
     def parameter_reset(self):
-        self.picture_num = 0
+        self.collect_list = []
 
 # Sub_DisplayPicture class
 class Sub_DisplayPicture:
@@ -558,7 +404,7 @@ class Sub_DisplayPicture:
         return x, y, handover
 
 
-cell_one_round = [282, 184, 264, 184, 180, 115, 184, 184, 174]
+cell_one_round = [281, 184, 264, 184, 180, 113, 184, 184, 174]
 ue = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 time_divisions = 100
 color_map = {
@@ -573,12 +419,13 @@ color_map = {
     9: 'cyan'
 }
 
-dp = DisplayPicture(cell_one_round, cell_location)
+dp = DisplayPicture(cell_location)
 sub_dp = Sub_DisplayPicture(ue_location)
 
 dp.picture_setting()
 dp.plot_cell()
 
+print("exporting image......")
 # 部分顯示，並存檔
 for time_segment in range(time_divisions) :
     for ue_num in range(9):
@@ -586,7 +433,32 @@ for time_segment in range(time_divisions) :
         part_cell_one_round = sub_dp.divide_percent(cell_one_round[ue_num], time_divisions)
         x, y, handover = sub_dp.find_ue_location(ue_num, part_cell_one_round[time_segment])
         dp.pre_display_data(ue[ue_num], handover, x ,y, part_cell_one_round[time_segment], color_map, first_time)
-    dp.animate()
+    dp.display_part_and_save()
+    if (time_segment != time_divisions - 1):
+        dp.parameter_reset()
+    
+heights, widths = zip(*dp.collect_list)
+# y轴的位置
+y_values = np.arange(9)
+# 长条的宽度
+bar_width = 0.35
+# 创建一个新的figure对象
+fig, ax = plt.subplots()
+# 创建两个横条图
+bar1 = ax.barh(y_values + bar_width, widths, bar_width, label='model-based handover number')
+bar2 = ax.barh(y_values, heights, bar_width, label='A3-based handover number')
+# 设置y轴的刻度和刻度标签
+ax.set_yticks(y_values + bar_width / 2)
+labels = ['ue' + str(i+1) for i in range(9)]
+ax.set_yticklabels(labels)
+# 添加图例
+ax.legend()
+# 显示图形
+plt.show()
+# 設定檔名、位置，並儲存
+file_name = f"plot_picture101.png"
+file_path = os.path.join("picture", file_name)
+fig.savefig(file_path, dpi=300)
 
 
 
