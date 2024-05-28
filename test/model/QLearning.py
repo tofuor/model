@@ -6,9 +6,6 @@
 # In[ ]:
 
 
-# import matplotlib
-# matplotlib.use('Agg')  # 使用Agg backend，它不需要GUI支持
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -24,20 +21,39 @@ def plot_picture(PacketLoss, streaming_datasize, KpmReport_data, slice):
     time_axis_length = 5 * (len(PacketLoss)-1) if PacketLoss else 0
     time_axis = np.linspace(0, time_axis_length, len(PacketLoss) if PacketLoss else 1)
 
+    # 第一張圖：數據流大小和KpmReport數據
     plt.figure(figsize=(10, 5))
     plt.plot(time_axis, [sublist[0] for sublist in streaming_datasize], label='Video Streaming Server to (UE1)', color='blue')
     plt.plot(time_axis, [sublist[1] for sublist in streaming_datasize], label='Real-time Streaming Server (UE2)', color='darkblue')
-    plt.plot(time_axis, [sublist[0] for sublist in KpmReport_data], label='Receive Data (UE1)', color='green')
-    plt.plot(time_axis, [sublist[1] for sublist in KpmReport_data], label='Receive Data (UE2)', color='darkgreen')
-    plt.plot(time_axis, [sublist[0] for sublist in PacketLoss], label='Packet Loss of (UE1)', color='red')
-    plt.plot(time_axis, [sublist[1] for sublist in PacketLoss], label='Packet Loss of (UE2)', color='darkred')
+    plt.plot(time_axis, [sublist[0] for sublist in KpmReport_data], label='Receive Video Data (UE1)', color='green')
+    plt.plot(time_axis, [sublist[1] for sublist in KpmReport_data], label='Receive Real-time Data (UE2)', color='darkgreen')
     plt.legend()
     plt.title('Traffic Data Analysis Over Time')
     plt.xlabel('Time (seconds)')
     plt.ylabel('Bits')
     plt.grid(True)
-    plt.savefig('plot.png')  # 保存圖片到檔案，而不是顯示
+    plt.savefig('data_analysis_plot.png')  # 保存第一張圖
     plt.close()
+
+    # 第二張圖：封包丟失率
+    plt.figure(figsize=(10, 5))
+    plt.plot(time_axis, [sublist[0] for sublist in PacketLoss], label='Video Packet Loss rate of (UE1)', color='red')
+    plt.plot(time_axis, [sublist[1] for sublist in PacketLoss], label='Real-time Packet Loss rates of (UE2)', color='darkred')
+    plt.legend()
+    plt.title('Packet Loss Over Time')
+    plt.xlabel('Time (seconds)')
+    plt.ylabel('Packet Loss')
+    plt.grid(True)
+    plt.savefig('packet_loss_plot.png')  # 保存第二張圖
+    plt.close()
+
+# 假設你有數據可以傳入函數來測試
+PacketLoss = [[0, 1], [2, 3], [4, 5]]
+streaming_datasize = [[100, 200], [300, 400], [500, 600]]
+KpmReport_data = [[700, 800], [900, 1000], [1100, 1200]]
+slice = None
+
+plot_picture(PacketLoss, streaming_datasize, KpmReport_data, slice)
 
 
 # ### QLearning Agent
@@ -87,13 +103,13 @@ class QLearningAgent:
         
     def reward_function(self, report_data, total_collected_data):
         """(reward function)，計算reward"""
-        if(report_data[0] > 0):
-            Ue1PacketLoss = (total_collected_data[0] - report_data[0]) / report_data[0]
+        if(report_data[0] > 0 and total_collected_data[0] > report_data[0]):
+            Ue1PacketLoss = (total_collected_data[0] - report_data[0]) / total_collected_data[0]
         else:
             Ue1PacketLoss = 0
             
-        if(report_data[1] > 0):    
-            Ue2PacketLoss = (total_collected_data[1] - report_data[1]) / report_data[1]
+        if(report_data[1] > 0 and total_collected_data[1]>report_data[1]):    
+            Ue2PacketLoss = (total_collected_data[1] - report_data[1]) / total_collected_data[1]
         else:
             Ue2PacketLoss = 0
         

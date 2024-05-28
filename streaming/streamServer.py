@@ -11,9 +11,9 @@ app = Flask(__name__)
 # 目標伺服器的 URL
 target_url = "http://127.0.0.1:1212/A1message"
 max_ratio = 4000
-first_time = 30
-second_time = 60
-# third_time = 90
+first_time = 300
+second_time = 600
+third_time = 900
 
 
 def run_iperf(total_data, duration, server_ip, port, send_netns):
@@ -32,28 +32,6 @@ def run_iperf(total_data, duration, server_ip, port, send_netns):
     except requests.exceptions.RequestException as e:
         print(f"Request failed: {e}")
 
-# # 使用 iperf 发送数据并捕获输出
-# def run_iperf(total_data, duration, server_ip, port, netns):
-#     send_netns = netns
-#     command = f'iperf -c {server_ip} -p {port} -n {total_data}'
-
-#     print(f"Transfer {total_data} to {send_netns}, duration {duration} sec")
-#     result = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-#     # 解析输出
-#     for line in result.stdout:
-#         if 'bits/sec' in line:
-#             print(line.strip())
-
-#     # 发送消息到目标 URL
-#     message = f"Transfer {total_data} to {send_netns}, duration {duration} sec"
-#     payload = {"message": message}
-#     try:
-#         response = requests.post(target_url, json=payload)
-#         print(f"Sent: {payload}, Response: {response.status_code}")
-#     except requests.exceptions.RequestException as e:
-#         print(f"Request failed: {e}")
-
 # 随机生成的时间段和流量速率
 def generate_random_traffic_schedule(target_duration):
     traffic_schedule = []
@@ -62,7 +40,7 @@ def generate_random_traffic_schedule(target_duration):
     while accumulated_duration < target_duration:
         remaining_duration = target_duration - accumulated_duration
         # 保證每次的 duration 不超過剩餘時間，最多只能是 2 秒
-        duration = round(random.uniform(0, min(2, remaining_duration)), 1)
+        duration = round(random.uniform(0, min(1.7, remaining_duration)), 1)
         max_rate = max_ratio * duration  # rate 范围是 0 到 duration * 1500
         rate = random.uniform(0, max_rate)
         traffic_schedule.append((rate, duration))
@@ -73,14 +51,14 @@ def generate_random_traffic_schedule(target_duration):
 def generate_static_traffic_schedule(target_duration):
     traffic_schedule = []
     time_duration = 0 
-    duration = 2
+    duration = 1
     for _ in range(target_duration):
         time_duration += 1 
 
-        if(time_duration > first_time):
-            duration = 1
-        
-        rate = max_ratio * duration
+        if(time_duration > second_time):
+            rate = max_ratio * duration / 2
+        else:        
+            rate = max_ratio * duration 
         # rate = random.uniform(0, max_rate)
         traffic_schedule.append((rate, duration))
     return traffic_schedule
@@ -97,7 +75,7 @@ ue1_server_ip = '172.16.0.2'
 ue2_server_ip = '172.16.0.3'
 ue1_port = 8787 
 ue2_port = 5487 
-target_duration = 60  # 定义需要多少组数据
+target_duration = third_time  # 定义需要多少组数据
 
 # 生成随机的 traffic_schedule
 ue1_traffic_schedule = generate_static_traffic_schedule(target_duration)
