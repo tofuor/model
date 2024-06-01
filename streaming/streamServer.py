@@ -10,7 +10,8 @@ app = Flask(__name__)
 
 # 目標伺服器的 URL
 target_url = "http://127.0.0.1:1212/A1message"
-max_ratio = 4000
+cell_max_ratio = 10*1024
+max_ratio = 6*1024
 first_time = 300
 second_time = 600
 third_time = 900
@@ -40,8 +41,8 @@ def generate_random_traffic_schedule(target_duration):
     while accumulated_duration < target_duration:
         remaining_duration = target_duration - accumulated_duration
         # 保證每次的 duration 不超過剩餘時間，最多只能是 2 秒
-        duration = round(random.uniform(0, min(1.7, remaining_duration)), 1)
-        max_rate = max_ratio * duration  # rate 范围是 0 到 duration * 1500
+        duration = round(random.uniform(0, min(2, remaining_duration)), 1)
+        max_rate = random.randint(0, int((cell_max_ratio - max_ratio) * duration)) 
         rate = random.uniform(0, max_rate)
         traffic_schedule.append((rate, duration))
         accumulated_duration += duration
@@ -55,10 +56,10 @@ def generate_static_traffic_schedule(target_duration):
     for _ in range(target_duration):
         time_duration += 1 
 
-        if(time_duration > second_time):
-            rate = max_ratio * duration / 2
+        if(time_duration > first_time):
+            rate = max_ratio * duration
         else:        
-            rate = max_ratio * duration 
+            rate = max_ratio * duration  / 2
         # rate = random.uniform(0, max_rate)
         traffic_schedule.append((rate, duration))
     return traffic_schedule
@@ -71,8 +72,8 @@ def run_traffic_schedule(traffic_schedule, server_ip, port, netns):
         
 # --------------------------------------主程式-------------------------------------------
 
-ue1_server_ip = '172.16.0.2'
-ue2_server_ip = '172.16.0.3'
+ue1_server_ip = '172.16.0.3'
+ue2_server_ip = '172.16.0.2'
 ue1_port = 8787 
 ue2_port = 5487 
 target_duration = third_time  # 定义需要多少组数据
