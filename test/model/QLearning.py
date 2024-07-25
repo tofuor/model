@@ -8,68 +8,261 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from matplotlib.ticker import LogFormatter, LogLocator
+import matplotlib.ticker as ticker
 
-def plot_picture(PacketLoss, streaming_datasize, KpmReport_data, slice, reward):
+class SMAPlotType():
+    def __init__(self): 
+        self.RR_packetloss:list = []
+        self.BET_packetloss:list = []
+        self.DQN_packetloss:list = []
+        
+        self.video_packet_queue:list = []
+        self.real_time_packetloss_rate:list = []
+        self.video_PRB_utilization: list = []
+        self.real_time_PRB_utilization: list = []
+        
+    def reset(self):
+        self.RR_packetloss = []
+        self.BET_packetloss = []
+        self.DQN_packetloss = []
+        
+        self.video_packet_queue = []
+        self.real_time_packetloss_rate = []
+        self.video_PRB_utilization = []
+        self.real_time_PRB_utilization = []
+    
+    def utilization_calculate(self, kpm_data:list, slice_select:list, max_base_station_throughput:int) -> list:
+        '''
+        video_PRB_utilization = video_throughput / max_throughput , 
+        max_throughput = max_base_station_throughput * video_slice/(video_slice + real_time_slice)
+        '''
+        mapping = {0: 64, 1: 128, 2: 256, 3: 512, 4: 1024}
+        video_max_throughput = max_base_station_throughput * mapping[slice_select[0]]/(mapping[slice_select[0]] + mapping[slice_select[1]])
+        temp_video_PRB_utilization = kpm_data[0] / video_max_throughput
+        real_time_max_throughput = max_base_station_throughput * mapping[slice_select[1]]/(mapping[slice_select[0]] + mapping[slice_select[1]])
+        temp_real_time_PRB_utilization = kpm_data[1] / real_time_max_throughput
+        
+        return [temp_video_PRB_utilization, temp_real_time_PRB_utilization]
+
+def plot_picture(KpmReport_data, streaming_datasize, PacketLoss, reward, slice, tag):
     if not PacketLoss or not isinstance(PacketLoss[0], list):
         print("Error: global_PacketLoss is empty or not properly formatted.")
         return
     
-    # print(f"global_PacketLoss = {PacketLoss}")
-    # print(f"global_streaming_datasize = {streaming_datasize}")
-    # print(f"global_KpmReport_data = {KpmReport_data}")
+    # print(f"KpmReport_data = {KpmReport_data}")
+    # print(f"streaming_datasize = {streaming_datasize}")
+    print(f"PacketLoss = {PacketLoss}")
+    # print(f"reward = {reward}")
+    # print(f"slice = {slice}")
     
     time_axis_length = 5 * (len(PacketLoss)-1) if PacketLoss else 0
     time_axis = np.linspace(0, time_axis_length, len(PacketLoss) if PacketLoss else 1)
+    
+    if(tag%3 == 0):
+        label = f"RR {tag//3}"
+    elif(tag%3 == 1):
+        label = f"BET {tag//3}"
+    else:
+        label = f"DDQN {tag//3}"
+    
+    # print("picture 1")
 
     # 第一張圖：數據流大小和KpmReport數據
     plt.figure(figsize=(10, 5))
-    plt.plot(time_axis, [sublist[0] for sublist in streaming_datasize], label='Video Streaming Server to (UE1)', color='blue')
-    plt.plot(time_axis, [sublist[1] for sublist in streaming_datasize], label='Real-time Streaming Server (UE2)', color='darkblue')
-    plt.plot(time_axis, [sublist[0] for sublist in KpmReport_data], label='Receive Video Data (UE1)', color='green')
-    plt.plot(time_axis, [sublist[1] for sublist in KpmReport_data], label='Receive Real-time Data (UE2)', color='darkgreen')
+    plt.plot(time_axis, [sublist[0] for sublist in streaming_datasize], label='Video Streaming Server to (UE1)', color='darkblue')
+    plt.plot(time_axis, [sublist[1] for sublist in streaming_datasize], label='Real-time Streaming Server (UE2)', color='darkviolet')
+    plt.plot(time_axis, [sublist[0] for sublist in KpmReport_data], label='Video Data Receive (UE1)', color='darkgreen')
+    plt.plot(time_axis, [sublist[1] for sublist in KpmReport_data], label='Real-time Data Receive (UE2)', color='darkorange')
     plt.legend()
-    plt.title('Traffic Data Analysis Over Time')
+    plt.title(f'Traffic Data Analysis Over Time ({label})')
     plt.xlabel('Time (seconds)')
-    plt.ylabel('Data Rate bits/s')
+    plt.ylabel('Data Rate (bits/s)')
     plt.grid(True)
-    plt.savefig('data_analysis_plot.png')  # 保存第一張圖
+    plt.savefig(f'data_analysis_plot_{label}.png')  # 保存第一張圖
     plt.close()
 
+    # print("picture 2")
     # 第二張圖：封包丟失率
     plt.figure(figsize=(10, 5))
-    plt.plot(time_axis, [sublist[0] for sublist in PacketLoss], label='Video Packet Loss rate of (UE1)', color='red')
+    plt.plot(time_axis, [sublist[0] for sublist in PacketLoss], label='Video Packet Loss rate of (UE1)', color='orangered')
     plt.plot(time_axis, [sublist[1] for sublist in PacketLoss], label='Real-time Packet Loss rates of (UE2)', color='darkred')
+    
+    # 设置 y 轴为对数刻度，底数为 10
+    plt.yscale('log', base=10)
+    # 设置 y 轴的刻度
+    ticks = [10**i for i in range(11)]  # Generates [1, 10, 100, ..., 10^10]
+    plt.yticks(ticks, [f"10^{i}" for i in range(11)])  # Labels as 10^0, 10^1, ..., 10^10
+    
     plt.legend()
-    plt.title('Packet Loss Over Time')
+    plt.title(f'Packet Loss Over Time ({label})')
     plt.xlabel('Time (seconds)')
-    plt.ylabel('Packet Loss (bits)')
+    plt.ylabel('Log10 of Packet Loss (bits)')
     plt.grid(True)
-    plt.savefig('packet_loss_plot.png')  # 保存第二張圖
+    plt.savefig(f'packet_loss_plot_{label}.png')  # 保存第二張圖
     plt.close()
 
+    # print("picture 3")
     # 第三張圖：切片選擇
+    mapping = {0: 64, 1: 128, 2: 256, 3: 512, 4: 1024}
     plt.figure(figsize=(10, 5))
-    plt.plot(time_axis, [sublist[0] for sublist in slice], label='Slice of (UE1)', color='red')
-    plt.plot(time_axis, [sublist[1] for sublist in slice], label='Slice of (UE2)', color='darkred')
-    plt.yticks([64, 128, 256, 512, 1024])  # 設置縱軸的刻度
+    plt.plot(time_axis, [mapping[sublist[0]] for sublist in slice], label='Slice of (UE1)', color='orangered')
+    plt.plot(time_axis, [mapping[sublist[1]] for sublist in slice], label='Slice of (UE2)', color='darkred')
+    
+    plt.yscale('log', base=2)  # 設置 y 軸為對數刻度，底數為 2
+    # 設定對數刻度的標籤
+    powers = np.arange(6, 11)  # 從 2^6 到 2^10
+    ticks = 2 ** powers  # 計算 2 的冪次值
+    labels = [f"2^{p}" for p in powers]  # 生成標籤 2^6, 2^7, 等...
+
+    plt.yticks(ticks, labels)  # 設置 y 軸的刻度和標籤
     plt.legend()
-    plt.title('Slice Select')
+    plt.title(f'Slice Select ({label})')
     plt.xlabel('Time (seconds)')
-    plt.ylabel('Slice Size')
+    plt.ylabel('Log2 of Slice Size')
     plt.grid(True)
-    plt.savefig('slice_select.png')  # 保存第二張圖
+    plt.savefig(f'slice_select_{label}.png')  # 保存第二張圖
     plt.close()
     
-    # 第三張圖：切片選擇
+    # print("picture 4")
+    # 第四張圖：模型獎勵
     plt.figure(figsize=(10, 5))
     plt.plot(time_axis, reward, label='model reward', color='red')
     plt.legend()
-    plt.title('Model reward')
+    plt.title(f'Model reward ({label})')
     plt.xlabel('Time (seconds)')
     plt.ylabel('Reward')
     plt.grid(True)
-    plt.savefig('model_reward.png')  # 保存第二張圖
+    plt.savefig(f'model_reward_{label}.png')  # 保存第二張圖
     plt.close()
+    
+    # Packet Queue Length, Video Packet Packet Queue Length (SMA)
+    
+def sma_plot_preprocess(data:list, window_size:int, plot_label:str, title:str, ylabel:str, save_name:str, ylog_enabled:int):
+    
+    underload_time = 117
+    print(f"data[0] = {data[0]}")
+    print(f"data[1] = {data[1]}")
+    print(f"data[2] = {data[2]}")
+    data_length = min(len(data[0]), len(data[1]), len(data[2]))
+    print(f"data_length = {data_length}")
+    
+    df_sma_data = pd.DataFrame(data, index=['RR', 'BET', 'DDQN'])
+    
+    
+    length = min(len(df_sma_data.loc['RR']), len(df_sma_data.loc['BET']), len(df_sma_data.loc['DDQN']))
+    print(f"length = {length}")
+    ticks = np.arange(length) * 5
+    
+    # 計算SMA
+    RR_sma = df_sma_data.loc['RR'].rolling(window=window_size, min_periods=1).mean()
+    BET_sma = df_sma_data.loc['BET'].rolling(window=window_size, min_periods=1).mean()
+    DDQN_sma = df_sma_data.loc['DDQN'].rolling(window=window_size, min_periods=1).mean()
+    
+    plt.figure(figsize=(10, 5))
+    plt.plot(ticks, RR_sma[:length], label=f'RR {plot_label}', color='darkorange')
+    plt.plot(ticks, BET_sma[:length], label=f'BET {plot_label}', color='olive')
+    plt.plot(ticks, DDQN_sma[:length], label=f'DDQN {plot_label}', color='darkred')
+    
+    # save result
+    with open('packet_loss_data.txt', 'a') as file:
+        file.write(f"{save_name}, All RR data = {data[0]}\n")
+        file.write(f"{save_name}, All BET data = {data[1]}\n")
+        file.write(f"{save_name}, All DDQN data = {data[2]}\n")
+        if(ylog_enabled):
+            file.write(f"{save_name}, (underload) RR = {data[0][underload_time]}, BET = {data[1][underload_time]}, DDQN = {data[2][underload_time]}\n")
+            file.write(f"{save_name}, (last) RR = {data[0][data_length-1]}, BET = {data[1][data_length-1]}, DDQN = {data[2][data_length-1]}\n")
+        else:
+            RR_average_underload = sum(data[0][:underload_time-1]) / underload_time
+            BET_average_underload = sum(data[1][:underload_time-1]) / underload_time
+            DDQN_average_underload = sum(data[2][:underload_time-1]) / underload_time
+            file.write(f"{save_name}, (underload) RR = {RR_average_underload}, BET = {BET_average_underload}, DDQN = {DDQN_average_underload}\n")
+            RR_average_full_time = sum(data[0]) / len(data[0])
+            BET_average_full_time = sum(data[1]) / len(data[1])
+            DDQN_average_full_time = sum(data[2]) / len(data[2])
+            file.write(f"{save_name}, (last) RR = {RR_average_full_time}, BET = {BET_average_full_time}, DDQN = {DDQN_average_full_time}\n")
+    
+    plt.legend(prop={'size': 15})
+    plt.title(f'{title}')
+    plt.xlabel('Time (seconds)')
+    
+    if(ylog_enabled):    
+        # 设置 y 轴为对数刻度，底数为 10
+        plt.yscale('log', base=10)
+        # 设置 y 轴的刻度
+        ticks = [10**i for i in range(5, 10)]  # Generates [1, 10, 100, ..., 10^8]
+        plt.yticks(ticks, [f"10^{i}" for i in range(5, 10)])  # Labels as 10^0, 10^1, ..., 10^8
+        
+    plt.ylabel(ylabel)
+    plt.grid(True)
+    plt.savefig(save_name)
+    plt.close()
+    
+def SMA_plot_picture(sma_plot:SMAPlotType, tag:int):
+    
+    video_window_size = 1
+    window_size = 20
+    
+    
+    sma_plot_preprocess(sma_plot.video_packet_queue, video_window_size, "Packet Queue Length", "Video Packet Queue Length (SMA)", "Log10 of Packet Queue length (bits)", f"Video_packet_loss_plot_SMA_{tag}.png", 1)
+    sma_plot_preprocess(sma_plot.real_time_packetloss_rate, window_size, "Packet Loss", "Real time Packet Loss Over Time (SMA)", "Packet Loss (bits)", f"Real-time_packet_loss_plot_SMA_{tag}.png", 0)
+    sma_plot_preprocess(sma_plot.video_PRB_utilization, window_size, "PRB utilization", "Video PRB utilization ", "PRB_utilization (%)", f"Video_PRB_utilization_{tag}.png", 0)
+    sma_plot_preprocess(sma_plot.real_time_PRB_utilization, window_size, "PRB utilization", "Real time PRB utilization ", "PRB_utilization (%)", f"Real_time_PRB_utilization_{tag}.png", 0)
+
+
+# ### Other Methed
+
+# In[ ]:
+
+
+import math
+
+class RoundRobin:
+    ''' This function make sure UE1 & UE2 have fair resource '''
+    def __init__(self):
+        self.slice = 0
+        
+    def choose_action(self):
+        return [self.slice, self.slice]
+
+class BlindEqualThroughput:
+    ''' This function consider UE1 & UE2 average throughput '''
+    def __init__(self):
+        self.ue1_average_throughput = 0
+        self.ue2_average_throughput = 0
+        self.last_throughput_queue = []
+        self.statistcs_time = 0
+        
+    def choose_action(self, kpm_data):
+        if(len(self.last_throughput_queue) >= 5):  self.last_throughput_queue.pop(0) 
+        # self.last_throughput_queue.append(kpm_data)
+        self.statistcs_time += 1
+        
+        self.ue1_average_throughput = ((self.ue1_average_throughput*(5)) + kpm_data[0]) / 6
+        self.ue2_average_throughput = ((self.ue2_average_throughput*(5)) + kpm_data[1]) / 6
+        
+        # ue1_last_throughput_list = [sublist[0] for sublist in self.last_throughput_queue if len(sublist) > 0]
+        # ue2_last_throughput_list = [sublist[1] for sublist in self.last_throughput_queue if len(sublist) > 0]
+        # ue1_average_throughput = sum(ue1_last_throughput_list) / len(ue1_last_throughput_list)
+        # ue2_average_throughput = sum(ue2_last_throughput_list) / len(ue2_last_throughput_list)
+        
+        if(self.ue1_average_throughput > self.ue2_average_throughput):
+            diff = self.ue1_average_throughput / self.ue2_average_throughput if self.ue2_average_throughput != 0 else 16
+            
+            limited_result = max(1, min(16, diff))
+            log_result = math.log2(limited_result)
+            rounded_result = round(log_result)            
+            action = [rounded_result, 0] 
+        else:
+            diff = self.ue2_average_throughput / self.ue1_average_throughput if self.ue1_average_throughput != 0 else 16
+            
+            limited_result = max(1, min(16, diff))
+            log_result = math.log2(limited_result)
+            rounded_result = round(log_result)            
+            action = [0, rounded_result] 
+        
+        return action
 
 
 # ### DQN 
@@ -96,99 +289,59 @@ def build_model(state_size, action_size):
 
 class DQNAgent:
     def __init__(self):
+        # define action、memory、model_size
         self.action_space = spaces.MultiDiscrete([5, 5])
-        self.last_state = [0, 0, 4, 2]
-        self.action = [4,2]
-        self.reward = 0
-        self.memory = deque(maxlen=1024*1024)
-
-        self.gamma = 0.95    # discount rate
-        self.epsilon = 1  # exploration rate
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.8
-        
-        self.memory_capacity = 10
-        self.save_model = 17
-        self.memory_counter = 0 
-        
-        self.real_PacketLoss = []
-        self.streaming_datasize = []
-        self.KpmReport_data = []
-        self.slice = []
-        self.reward_measurement = []
-
-        self.ue1_weight = 1
-        self.ue2_weight = 3
-        self.ue1PacketLoss = 0
-        self.ue2PacketLoss = 0
-
         self.model = build_model(4, 25)
         self.target_model = build_model(4, 25)
-        # self.load("DQN_model_next_epoch.h5")
-        self.update_target_model()
+        self.memory = deque(maxlen=1024*1024)
+        # define super parameters
+        self.gamma = 0.95    # discount rate
+        self.epsilon = 0.15  # exploration rate
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.9
+        self.memory_capacity = 10
 
-    def update_target_model(self):
+        # init        
+        self.agent_init()
+
+    def agent_init(self):
+        # model training parameter
+        self.accumluation_reward = 0
+        self.last_state = [0, 0, 4, 4]
+        print(f"self.epsilon = {self.epsilon}")
+        if(self.epsilon != 1):  self.load("DQN_model_next_epoch.h5")
+        self.epsilon *= self.epsilon_decay
+        self.memory_counter = 0
+        # model parameter
+        
+        self._update_target_model()
+        
+        self.temp_epsilon = self.epsilon
+        
+    def step_reset(self):
+        self.step = 0
+
+    def _update_target_model(self):
         self.target_model.set_weights(self.model.get_weights())
 
-    def remember(self, state, action, reward, next_state):
+    def _remember(self, state, action, reward, next_state):
         self.memory.append((state, action, reward, next_state))
 
-    def choose_action(self, state):
-        """(policy)，選擇動作：探索或利用"""
-        # state[0] = state[0] / (1024*1024)
-        # state[1] = state[1] / (1024*1024)
-        # print(f"convert state = {state}")
-        # if((state[0] + state[1]) < 30):  
-        #     action_intervals = [0.6, 1.1, 2, 3.5, 5, 7]
-        #     sub_intervals = np.array(action_intervals)              
-
-        #     idx = np.searchsorted(sub_intervals, state[1], side='right') + 2
-        #     if(idx >= 6):
-        #         action = [3,4]
-        #     elif(idx == 5):
-        #         action = [self.action[0], 4]
-        #     else:
-        #         action = [4, idx] 
-
-        #     print(f"smaller: ue1 = {action[0]}, ue2 = {action[1]}")    
-        # else:
-        #     action_intervals = [1, 2, 4.3, 7, 14]
-        #     sub_intervals = np.array(action_intervals)
-        #     state[1] = state[1] * 3
-        #     if(state[0] > state[1]):
-        #         diff = state[0] / state[1] if state[1] != 0 else 15
-        #         idx = np.searchsorted(sub_intervals, diff, side='right')
-        #         if(idx == 5):
-        #             action = [4,0]
-        #         else:
-        #             offset = idx%2
-        #             # offset = 0
-        #             action = [idx + offset, 4-idx + offset] 
-        #     else:
-        #         diff = state[1] / state[0] if state[0] != 0 else 15 
-        #         idx = np.searchsorted(sub_intervals, diff, side='right')
-        #         if(idx == 5):
-        #             action = [0,4]
-        #         else:
-        #             offset = idx%2
-        #             # offset = 0
-        #             action = [4-idx + offset, idx + offset]
-        #     print(f"larger: ue1 = {action[0]}, ue2 = {action[1]}")    
-        
-        # return action
-        
+    def choose_action(self, input_state):
+        """(policy)，選擇動作：探索或利用"""        
         if random.uniform(0, 1) < self.epsilon:
-            return self.action_space.sample() # 探索：隨機選擇動作
+            action = self.action_space.sample()
+            return action.tolist() # 探索：隨機選擇動作
         else:
-            state = np.array(state).reshape(1, -1)
+            state = np.array(input_state).reshape(1, -1)
             q_values = self.model.predict(state)
-            print(f"q_values = {q_values}")
+            # print(f"q_values = {q_values}")
             action_index = np.argmax(q_values[0])
-            print(f"action_index = {action_index}")
+            # print(f"action_index = {action_index}")
             x = math.floor(action_index / 5)  # 整數除法得到行索引
             y = action_index % 5   # 取餘數得到列索引
             action = [x, y]
-            print(f"in choose action is {action}")
+            # print(f"in choose action is {action}")
             return action  # 利用：選擇當前最佳動作
         
     def replay(self, batch_size):
@@ -205,158 +358,36 @@ class DQNAgent:
             action_1D = action[0] * 5 + action[1]
             target[0][action_1D] = reward + self.gamma * np.amax(t)
             self.model.fit(state, target, epochs=1, verbose=0)
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+        # if self.epsilon > self.epsilon_min:
+        #     self.epsilon *= self.epsilon_decay
 
     def load(self, name):
         self.model.load_weights(name)
 
     def save(self, name):
         self.model.save_weights(name)
-        
-    # def packetLoss_function_linear_function(self, total_collected_data, report_data):
-    #     current_ue1_packet_accumulation = self.ue1PacketLoss + total_collected_data[0] - report_data[0]
-    #     current_ue2_packet_accumulation = self.ue2PacketLoss + total_collected_data[1] - report_data[1]
-    #     packet_loss_list = [current_ue1_packet_accumulation, current_ue2_packet_accumulation]
 
-    #     return packet_loss_list
-        
-    def packetLoss_calculate(self, report_data, total_collected_data):
-        
-        # 如果子列表不為空，獲取子列表的最後一個元素
-        if (self.real_PacketLoss == []):
-            last_list = [0, 0]
-        else:
-            last_list = self.real_PacketLoss[-1]
+    def train(self, kpm_data, action, reward):
+        # self.step += 1
+        # if(self.step < 120):    self.epsilon = 0
+        # else:                   self.epsilon = self.temp_epsilon
             
-        ue1_current_packet_accmulation = last_list[0] + total_collected_data[0] - report_data[0]
-        ue2_current_packet_accmulation = last_list[1] + total_collected_data[1] - report_data[1]
-        if(ue1_current_packet_accmulation < 0): ue1_current_packet_accmulation = 0
-        if(ue2_current_packet_accmulation < 0): ue2_current_packet_accmulation = 0
-        print(f"ue1_current_packet_accmulation = {ue1_current_packet_accmulation}, ue2_current_packet_accmulation = {ue2_current_packet_accmulation}")
-        
-        packetloss_list = [ue1_current_packet_accmulation, ue2_current_packet_accmulation]
-        return packetloss_list
-    
-    def data_preprocessing(self, report_data, total_collected_data):
-        max_packet_accmulation = 9.5*5*1024*1024
-        
-        report_data = [x / max_packet_accmulation for x in report_data]
-        total_collected_data = [y / max_packet_accmulation for y in total_collected_data]
-                
-        return report_data, total_collected_data
-        
-    def reward_function(self, report_data, total_collected_data):
-        """(reward function)，計算reward"""
-        ue1_reward = 0
-        ue2_reward = 0
-        
-        ue1_current_packet_handle = report_data[0] - total_collected_data[0]
-        ue2_current_packet_handle = report_data[1] - total_collected_data[1]
-        self.ue1PacketLoss = self.ue1PacketLoss - ue1_current_packet_handle
-        self.ue2PacketLoss = self.ue2PacketLoss - ue2_current_packet_handle
-        print(f"ue1_current_packet_handle = {ue1_current_packet_handle}, ue2_current_packet_handle = {ue2_current_packet_handle}")
-        print(f"self.ue1PacketLoss = {self.ue1PacketLoss}, self.ue2PacketLoss = {self.ue2PacketLoss}")
-        
-        # 特殊情況1，完美傳送
-        if(self.ue1PacketLoss < 0): 
-            self.ue1PacketLoss = 0
-            ue1_reward = 1
-        else:
-            ue1_reward = ue1_current_packet_handle
-            
-        if(self.ue2PacketLoss < 0): 
-            self.ue2PacketLoss = 0
-            ue2_reward = 1
-        else:
-            ue2_reward = ue2_current_packet_handle
-            
-        # 特殊情況2，傳送資料超過總負荷 (streaming server直接設計不會有)
-        
-        # ue1 跟 ue2合併考慮
-        x = abs(self.ue2PacketLoss*3 - self.ue1PacketLoss)
-        if( x < 0.1):
-            merge_reward = 1-100*(x**2)
-        else:
-            # x = x/600
-            merge_reward = (200/361)*(x-0.1)*(x-3.9)
-            if(x >= 1.5): 
-                merge_reward = -1.5
-                # self.ue1PacketLoss = self.ue1PacketLoss/2
-            
-        # 通用情況
-        single_reward = (ue1_reward + ue2_reward) 
-        reward = single_reward + merge_reward
-        print(f"timestamp = {self.memory_counter*5}")
-        print(f"action = {self.action}")
-        print(f"ue1_reward = {ue1_reward}")
-        print(f"ue2_reward = {ue2_reward}")
-        print(f"x = {x}, merge_reward = {merge_reward}")
-        print(f"total reward = {reward}")
-        
-        return reward
-
-    def train(self, report_data, total_collected_data):
-        packet_cal = self.packetLoss_calculate(report_data, total_collected_data)
-        # print("real_packetLoss")
-        cell_report, server_send= self.data_preprocessing(report_data, total_collected_data)
-        print(f"cell_report = {cell_report}, server_send = {server_send}")
-        
-        state = [*cell_report, *self.action]
+        state = [*kpm_data, *action]
         # print(f"state = {state}")               
-        self.reward = self.reward + self.reward_function(cell_report, server_send)
+        self.accumluation_reward = self.accumluation_reward + reward  # 累積獎勵
         # print("train1")
-        self.remember(self.last_state, self.action, self.reward, state)
+        self._remember(self.last_state, action, self.accumluation_reward, state)
         # print("train2")
         self.last_state = state
         
         self.memory_counter += 1 
         if (((self.memory_counter%self.memory_capacity) == 0) and self.memory_counter > 10):
-            self.update_target_model()
+            self._update_target_model()
             self.replay(self.memory_capacity)
-            
-        # print("train3")
-        if ((self.memory_counter%self.save_model) == 0):
-            self.save(f'DQN_model_14_{self.memory_counter}.h5')           
         
-        # packetLoss_list_linear_function = self.packetLoss_function_linear_function(report_data, total_collected_data)
+        predict_action = self.choose_action(state)
         
-        self.action = self.choose_action(state)
-        # self.action = self.choose_action(packetLoss_list_linear_function)
-
-        real_action_space = [64, 128, 256, 512, 1024]
-        real_action = [real_action_space[self.action[0]] , real_action_space[self.action[1]]]        
-        
-        
-        
-        self.real_PacketLoss.append(packet_cal)
-        # self.real_PacketLoss.append(packetLoss_list)
-        self.streaming_datasize.append(total_collected_data)
-        self.KpmReport_data.append(report_data)
-        self.slice.append(real_action)
-        self.reward_measurement.append(self.reward)
-        plot_picture(self.real_PacketLoss, self.streaming_datasize, self.KpmReport_data, self.slice, self.reward_measurement)
-        
-        return real_action
-    
-    def inference(self, report_data, total_collected_data):
-        
-        state = report_data + self.action       
-        self.reward = self.reward + self.reward_function(report_data, total_collected_data)
-        self.action = self.choose_action(state)
-        
-        real_action_space = [64, 128, 256, 512, 1024]
-        real_action = [real_action_space[self.action[0]] , real_action_space[self.action[1]]]
-
-        packetLoss_list = self.packetLoss_function()
-        self.real_PacketLoss.append(packetLoss_list)
-        self.streaming_datasize.append(total_collected_data)
-        self.KpmReport_data.append(report_data)
-        self.slice.append(real_action)
-        self.reward_measurement.append(self.reward)
-        plot_picture(self.real_PacketLoss, self.streaming_datasize, self.KpmReport_data, self.slice, self.reward_measurement)
-        
-        return real_action
+        return predict_action
 
 
 # ### RAN control API
@@ -367,60 +398,310 @@ class DQNAgent:
 import requests
 import subprocess
 
-def put_to_nexran_xapp_fast(action):
-    nexran_xapp_host = get_nexran_xapp_ip()
+class RANControl:
+    def __init__(self):
+        self.xappIP = self.get_nexran_xapp_ip()
     
-    url = f"http://{nexran_xapp_host}:8000/v1/slices/fast"
-    headers = {'Content-type': 'application/json'}
-    data = {
-        "allocation_policy": {
-            "type": "proportional",
-            "share": action
+    def covert_real_action(self, action):
+        real_action_space = [64, 128, 256, 512, 1024]
+        return [real_action_space[action[0]], real_action_space[action[1]]]
+        
+    def put_to_nexran_xapp(self, action, slice_name):
+                
+        url = f"http://{self.xappIP}:8000/v1/slices/{slice_name}"
+        headers = {'Content-type': 'application/json'}
+        data = {
+            "allocation_policy": {
+                "type": "proportional",
+                "share": action
+            }
         }
-    }
-    
-    response = requests.put(url, json=data, headers=headers)
-    print(response.status_code)  # 打印HTTP狀態碼
-    # print(response.text)  # 打印API響應的內容
-    # print()  # 額外的空行
+        
+        response = requests.put(url, json=data, headers=headers)
+        print(response.status_code)  # 打印HTTP狀態碼
+        # print(response.text)  # 打印API響應的內容
+        # print()  # 額外的空行
 
-def put_to_nexran_xapp_slow(action):
-    nexran_xapp_host = get_nexran_xapp_ip()
-    
-    url = f"http://{nexran_xapp_host}:8000/v1/slices/slow"
-    headers = {'Content-type': 'application/json'}
-    data = {
-        "allocation_policy": {
-            "type": "proportional",
-            "share": action
-        }
-    }
-    
-    response = requests.put(url, json=data, headers=headers)
-    print(response.status_code)  # 打印HTTP狀態碼
-    # print(response.text)  # 打印API響應的內容
-    # print()  # 額外的空行
+    # 調用函式
+    def get_nexran_xapp_ip(self):
+        try:
+            # 執行 kubectl 命令並捕獲輸出
+            cmd = [
+                "kubectl", "get", "svc", "-n", "ricxapp",
+                "--field-selector", "metadata.name=service-ricxapp-nexran-rmr",
+                "-o", "jsonpath={.items[0].spec.clusterIP}"
+            ]
+            result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+            return result.stdout.strip()  # 返回標準輸出，去除多餘空白
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing command: {e}")
+            return None
 
 
-# 調用函式
-def get_nexran_xapp_ip():
-    try:
-        # 執行 kubectl 命令並捕獲輸出
-        cmd = [
-            "kubectl", "get", "svc", "-n", "ricxapp",
-            "--field-selector", "metadata.name=service-ricxapp-nexran-rmr",
-            "-o", "jsonpath={.items[0].spec.clusterIP}"
-        ]
-        result = subprocess.run(cmd, check=True, text=True, capture_output=True)
-        return result.stdout.strip()  # 返回標準輸出，去除多餘空白
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing command: {e}")
-        return None
+# ### Scheduler
+
+# In[ ]:
+
+
+import copy
+class PacketLossType():
+    '''
+    '''
+    def __init__(self):
+        self.accumulation: list = [0,0]
+        self.real_time_current: int = 0
+        
+    def reset(self):
+        self.accumulation: list = [0,0]
+        self.real_time_current: int = 0
+        
+        
+class PlotType():
+    def __init__(self):
+        self.kpmReport_data: list = []
+        self.iperf_data: list = []
+        self.packetloss_accumulation: list = []
+        self.model_reward: list = []
+        self.slice_select: list = []
+        
+    def reset(self):
+        self.kpmReport_data = []
+        self.iperf_data = []
+        self.packetloss_accumulation = []
+        self.model_reward = []
+        self.slice_select = []
+
+class Scheduler:
+    def __init__(self):
+        self.epoch:int = 0
+        self.server_time:int = 0
+        self.best_reward:int = 350
+        self.video_max_packet_current:int = 7*1024*1024*5
+        self.real_time_max_packet_current:int = 6*1024*1024*5
+        self.max_base_station_throughput:int = 10*1024*1024*5
+        
+        # method input addition define
+        self.last_action:list = [0,0]
+        
+        # plot storage
+        self.plot = PlotType()
+        self.sma_plot = SMAPlotType()
+        self.temp_sma_plot = SMAPlotType()
+        # self.temp_sma_plot = []
+        
+        # scheduler
+        self.DQN = DQNAgent()
+        self.RR = RoundRobin()               # null
+        self.BET = BlindEqualThroughput()    # average_throughput
+        
+        # temp
+        self.packetloss = PacketLossType()
+        self.reward = 0
+        self.reward_accmulation = 0
+        self.init_state_dont_store = 0 
+        
+    def _packetloss_calculate(self, kpmReport_data:list, iperf_data:list, packetloss:PacketLossType) -> PacketLossType:
+        ''' 
+            輸出過往累積的packetloss量 
+        '''
+        temp_packetloss = PacketLossType()
+        # 如果子列表不為空，獲取子列表的最後一個元素
+        print("in packetloss calculate")
+        if (packetloss.accumulation == []):
+            last_list = [1, 1]
+        else:
+            last_list = packetloss.accumulation
+        
+        temp_packetloss.real_time_current = iperf_data[1] - kpmReport_data[1] 
+        if(temp_packetloss.real_time_current <= 0): 
+            temp_packetloss.real_time_current = 1
+        
+        temp_packetloss.accumulation[0] = last_list[0] + iperf_data[0] - kpmReport_data[0]
+        if(temp_packetloss.accumulation[0] <= 0): temp_packetloss.accumulation[0] = 1 
+               
+        temp_packetloss.accumulation[1] = last_list[1] + temp_packetloss.real_time_current
+       
+        print(f"ue1_current_packet_accmulation = {temp_packetloss.accumulation[0]}, ue2_current_packet_accmulation = {temp_packetloss.accumulation[1]}, ue2_current_packet = {temp_packetloss.real_time_current}")
+
+        return temp_packetloss
+    
+    def _data_preprocessing(self, data:list, max_video_data:int, max_real_time_data:int) -> list:       
+        normalized_data = [data[0]/max_video_data, data[1]/max_real_time_data]
+                
+        return normalized_data
+    
+    def _jains_fairness_index(self, x: list) -> float:
+        x = np.array(x)  # 將列表轉換為 NumPy 陣列
+        return (np.sum(x) ** 2) / (len(x) * np.sum(x ** 2))
+    
+    def _reward_function(self, kpm_data:list, iperf_data:list, packetloss_accumulation:PacketLossType, slice_select:list) -> int:
+        """ 輸出目前狀態評分出來的reward，而不是累積reward """
+        
+        normalized_kpm_data = self._data_preprocessing(kpm_data, self.video_max_packet_current, self.real_time_max_packet_current)
+        normalized_iperf_data = self._data_preprocessing(iperf_data, self.video_max_packet_current, self.real_time_max_packet_current)
+        
+        real_action_space = [64, 128, 256, 512, 1024]
+        real_action_PRB = [real_action_space[slice_select[0]], real_action_space[slice_select[1]]]
+        PRB_utilization = [kpm_data[0]/real_action_PRB[0], kpm_data[1]/real_action_PRB[1]]
+        PRB_fairness_reward = self._jains_fairness_index(PRB_utilization)*4-2.5
+        
+        # 
+        ue1_current_packet_handle = normalized_iperf_data[0] - normalized_kpm_data[0] - (1/7)
+        ue2_current_packet_handle = normalized_iperf_data[1] - normalized_kpm_data[1]
+        # ue1_current_packet_handle = normalized_kpm_data[0] - normalized_iperf_data[0]
+        # ue2_current_packet_handle = normalized_kpm_data[1] - normalized_iperf_data[1]
+        print(f"ue1_current_packet_handle = {ue1_current_packet_handle}, ue2_current_packet_handle = {ue2_current_packet_handle}")
+        print(f"ue1_packetloss_accumulation = {packetloss_accumulation[0]}, ue2_packetloss_accumulation = {packetloss_accumulation[1]}")
+        # if(ue2_current_packet_handle):
+        #     print(f"ue2_packetloss rate = {normalized_kpm_data[1]/normalized_iperf_data[1] * 100}%")
+        
+        # 特殊情況1，
+        if(packetloss_accumulation[0] <= 1):    ue1_reward = 1
+        else:                                   ue1_reward = 0-ue1_current_packet_handle
+            
+        if(ue2_current_packet_handle <= 0):     ue2_reward = 1
+        else:                                   ue2_reward = 1-2*ue2_current_packet_handle
+            
+        reward = ue1_reward + ue2_reward + PRB_fairness_reward
+        print(f"ue1_reward = {ue1_reward}")
+        print(f"ue2_reward = {ue2_reward}")
+        print(f"total reward = {reward}")
+        
+        return reward
+        
+    def _decide_method(self, kpm_data:list, last_action:list, reward:int) -> list:
+        ''' 
+            決定要使用哪種演算法，每epoch一個method
+            0 : Blind Equal Throughput
+            1 : RoundRobin
+            2 : DQN
+            
+            output = action
+        '''      
+        
+        if (self.epoch%3) == 0:
+            action = self.RR.choose_action()
+            print("RR decision")
+            # normalized_kpm_data = self._data_preprocessing(kpm_data, self.video_max_packet_current, self.real_time_max_packet_current)
+            # action = self.DQN.train(normalized_kpm_data, last_action, reward)
+            # print("DQN decision")
+            
+        elif (self.epoch%3) == 1:
+            action = self.BET.choose_action(kpm_data)
+            print("BET decision")
+            # normalized_kpm_data = self._data_preprocessing(kpm_data, self.video_max_packet_current, self.real_time_max_packet_current)
+            # action = self.DQN.train(normalized_kpm_data, last_action, reward)
+            # print("DQN decision")
+            
+        elif (self.epoch%3) == 2:
+            normalized_kpm_data = self._data_preprocessing(kpm_data, self.video_max_packet_current, self.real_time_max_packet_current)
+            action = self.DQN.train(normalized_kpm_data, last_action, reward)
+            print("DQN decision")
+        else:
+            action = [4,4]
+            
+        return action
+    
+    def _step_display(self, kpm_data:list, iperf_data:list, packetloss:PacketLossType, reward:int, action:list):
+        
+        if(self.plot.model_reward): model_reward_accumulation = self.plot.model_reward[-1] + reward
+        else:                       model_reward_accumulation = reward
+        
+        temp_PRB_utilization = self.temp_sma_plot.utilization_calculate(kpm_data, action, self.max_base_station_throughput)
+        if(temp_PRB_utilization[0] > 1): temp_PRB_utilization[0] = 1
+        if(temp_PRB_utilization[1] > 1): temp_PRB_utilization[1] = 1
+        
+        self.plot.kpmReport_data.append(kpm_data)
+        self.plot.iperf_data.append(iperf_data)
+        self.plot.packetloss_accumulation.append(packetloss.accumulation)
+        self.plot.model_reward.append(model_reward_accumulation)
+        self.plot.slice_select.append(action)
+        
+        self.temp_sma_plot.video_packet_queue.append(packetloss.accumulation[0])
+        self.temp_sma_plot.real_time_packetloss_rate.append(packetloss.real_time_current)
+        self.temp_sma_plot.video_PRB_utilization.append(temp_PRB_utilization[0])
+        self.temp_sma_plot.real_time_PRB_utilization.append(temp_PRB_utilization[1])
+        
+        plot_picture(self.plot.kpmReport_data, self.plot.iperf_data, self.plot.packetloss_accumulation, self.plot.model_reward, self.plot.slice_select, self.epoch)
+            
+    def _execute_action(self, action:list):
+        ''' 根據method action打API到nexran_xapp '''
+        RAN_control = RANControl()
+        if action:
+            real_action = RAN_control.covert_real_action(action)
+            RAN_control.put_to_nexran_xapp(real_action[0], "fast")
+            RAN_control.put_to_nexran_xapp(real_action[1], "slow")
+        
+    def run(self, kpm_data:list, iperf_data:list):
+        ''' 
+            1. 計算packetloss, output = UE1、UE2累積packetloss、UE2瞬時packetloss
+            2. 計算reward
+            3. 根據目前的state、reward決定輸出動作
+            4. 繪製圖表
+            5. 執行action
+        '''
+        # print(f"in run, self.kpmReport_data = {self.kpmReport_data}")
+        self.packetloss = self._packetloss_calculate(kpm_data, iperf_data, self.packetloss)        
+        # print(f"pocketloss success, packetloss = {self.packetloss}")
+        self.reward = self._reward_function(kpm_data, iperf_data, self.packetloss.accumulation, self.last_action)
+        self.reward_accmulation = self.reward_accmulation + self.reward
+        # print(f"reward success, self.kpmReport_data = {self.kpmReport_data}")         
+        action = self._decide_method(kpm_data, self.last_action, self.reward)
+        # print(f"action success, self.kpmReport_data = {self.kpmReport_data}")       
+        self._step_display(kpm_data, iperf_data, self.packetloss, self.reward, action)
+        # print(f"step_display, self.kpmReport_data = {self.kpmReport_data}")
+        self._execute_action(action)
+        # print(f"execute_action success, self.kpmReport_data = {self.kpmReport_data}")
+
+# ------------------------------------------------------------------------------------------------------------------------------------        
+        
+    def _all_scheduler_display(self, sma_plot_packetloss:SMAPlotType):
+        ''' 繪製三種方法的圖表 + 計算real-time累積packetloss '''
+        SMA_plot_picture(sma_plot_packetloss, self.server_time)
+
+        print("after SMA_plot_picture")
+        self.server_time += 1
+        
+    def store_plot(self):
+        
+        temp = SMAPlotType()
+        temp = copy.deepcopy(self.temp_sma_plot)
+        
+        self.sma_plot.video_packet_queue.append(temp.video_packet_queue)
+        # print(f"sma_plot.video_packet_queue = {self.sma_plot.video_packet_queue}")
+        self.sma_plot.real_time_packetloss_rate.append(temp.real_time_packetloss_rate)
+        self.sma_plot.video_PRB_utilization.append(temp.video_PRB_utilization)
+        self.sma_plot.real_time_PRB_utilization.append(temp.real_time_PRB_utilization)
+        
+        if (self.epoch%3 == 2):
+            # plot SMA 
+            self._all_scheduler_display(self.sma_plot)
+            self.sma_plot.reset()
+            
+            # save model
+            if(self.best_reward < self.reward_accmulation):
+                # if(self.epoch > 0): self.DQN.save("DQN_model_next_epoch.h5")
+                self.DQN.save("DQN_model_next_epoch.h5")
+                self.best_reward = self.reward_accmulation
+                print(f"best_reward = {self.best_reward}, save model")
+            self.DQN.agent_init()
+            
+        self.init_state_dont_store = 0 
+            
+                            
+    def next_epoch(self):
+        self.plot.reset()
+        self.temp_sma_plot.reset()
+        self.packetloss.reset()
+        self.reward_accmulation = 0
+        self.reward = 0
+        self.epoch += 1
+        self.DQN.step_reset()
 
 
 # ### Iperf message collect
 
-# In[ ]:
+# In[2]:
 
 
 from flask import Flask, request, jsonify
@@ -430,103 +711,68 @@ import logging
 
 app = Flask(__name__)
 
-# 全局變數
-collected_data_ue1 = []
-collected_data_ue2 = []
-last_calculate_time = time.time()
+class CalculateDataType:
+    def __init__(self):
+        self.overflow_data: int = 0
+        self.overflow_duration: int = 0
+        self.collected_data: int = 0
 
-def collect_and_display():
-    global collected_data_ue1, collected_data_ue2, last_calculate_time
-    total_duration_ue1 = 0
-    total_duration_ue2 = 0
-    total_collected_data_ue1 = 0
-    total_collected_data_ue2 = 0
-    overflow_duration_ue1 = 0
-    overflow_duration_ue2 = 0
-    overflow_data_ue1 = 0
-    overflow_data_ue2 = 0
+
+class IperfServer:
+    def __init__(self):
         
-    current_time = time.time()
-    elapsed_time = current_time - last_calculate_time  # 計算時間差
-    last_calculate_time = current_time  # 更新時間戳
-    
+        self.iperf_temp_data_ue1 = []
+        self.iperf_temp_data_ue2 = []
+        self.last_calculate_time = time.time()
+        self.next_epoch_flag = False
+        self.plot_flag = False
+        
+    def _calculate_data(self, collected_data: list, elapsed_time: int) -> CalculateDataType:
+        ''' 
+            collected_data = self.iperf_temp_data_ue1 = [{data_volume, "ue1", next_send_interval}, {data_volume, "ue1", next_send_interval}, ...]
+        '''
+        temp_total_duration = 0
+        res = CalculateDataType()
 
-    # 計算並顯示 ue1 的數據
-    # -------------------------------------------------------------------------------------
-    if collected_data_ue1:
-        # print("in collected_data_ue1")
-        for data in collected_data_ue1:
-            total_duration_ue1 = total_duration_ue1 + data[2]
-            total_collected_data_ue1 = total_collected_data_ue1 + data[0]
+        for data in collected_data:
+            temp_total_duration += data[2]
+            res.collected_data += data[0]
             
-            if total_duration_ue1 > elapsed_time:
-                overflow_duration_ue1 = total_duration_ue1 - elapsed_time
-                overflow_data_ue1 =  data[0] * overflow_duration_ue1 / data[2]
-                total_collected_data_ue1 = total_collected_data_ue1 - overflow_data_ue1
-            else:
-                overflow_duration_ue1 = 0
-                overflow_data_ue1 = 0
-
-        print(f"Total Collected Data for ue1: {total_collected_data_ue1}K, Total Collected duration for ue1: {elapsed_time} sec")
-        # print(f"Overflow_data for Ue1 = {overflow_data_ue1}K, Overflow_duration for Ue1 = {overflow_duration_ue1} sec")
+            # 因為是server會先告知資料大小和下次傳輸時間，讓基站決定排程
+            # 當收集到的資料總時間 > KpmReport的固定時間，累積到接近kpmReport的interval，將超過的資料和時間設為overflow合併於下次計算
+            if temp_total_duration > elapsed_time:
+                res.overflow_duration = temp_total_duration - elapsed_time
+                res.overflow_data = data[0] * res.overflow_duration / data[2]
+                
+                res.collected_data -= res.overflow_data
+        
+        return res
     
+    def _reset_data(self, ue1:CalculateDataType , ue2:CalculateDataType ):
+        self.iperf_temp_data_ue1 = []
+        self.iperf_temp_data_ue2 = []
+        self.iperf_temp_data_ue1.append((ue1.overflow_data, "ue1", ue1.overflow_duration))
+        self.iperf_temp_data_ue2.append((ue2.overflow_data, "ue2", ue2.overflow_duration))
+        
+    def collect_iperf_data(self):
+        current_time = time.time()
+        elapsed_time = current_time - self.last_calculate_time
+        self.last_calculate_time = current_time
+
+        ue1 = self._calculate_data(self.iperf_temp_data_ue1, elapsed_time)
+        ue2 = self._calculate_data(self.iperf_temp_data_ue2, elapsed_time)
+
+        # Reset and store overflow data
+        self._reset_data(ue1, ue2)
+
+        return [ue1.collected_data * 1024, ue2.collected_data * 1024]
     
 
-    # 計算並顯示 ue2 的數據
-    # -------------------------------------------------------------------------------------
-    if collected_data_ue2:
-        # print("in collected_data_ue2")
-        for data in collected_data_ue2:
-            total_duration_ue2 = total_duration_ue2 + data[2]
-            total_collected_data_ue2 = total_collected_data_ue2 + data[0]
-            
-            if total_duration_ue2 > elapsed_time:
-                overflow_duration_ue2 = total_duration_ue2 - elapsed_time
-                overflow_data_ue2 =  data[0] * overflow_duration_ue2 / data[2]
-                total_collected_data_ue2 = total_collected_data_ue2 - overflow_data_ue2
-            else:
-                overflow_duration_ue2 = 0
-                overflow_data_ue2 = 0
-
-        print(f"Total Collected Data for ue2: {total_collected_data_ue2}K, Total Collected duration for ue2: {elapsed_time} sec")
-        # print(f"Overflow_data for Ue2 = {overflow_data_ue2}K, Overflow_duration for Ue2 = {overflow_duration_ue2} sec")
+    def detect_streaming_restart(self):
+        return self.next_epoch_flag
     
-    total_collected_data_list = [total_collected_data_ue1*1024, total_collected_data_ue2*1024]
-    
-    total_duration_ue1 = 0
-    total_collected_data_ue1 = 0
-    collected_data_ue1 = []
-    collected_data_ue1.append((overflow_data_ue1, "ue1", overflow_duration_ue1))
-    
-    total_duration_ue2 = 0
-    total_collected_data_ue2 = 0
-    collected_data_ue2 = []
-    collected_data_ue2.append((overflow_data_ue2, "ue2", overflow_duration_ue2))
-    
-    return total_collected_data_list
-
-@app.route('/A1message', methods=['POST'])
-def receive_message():
-    global collected_data_ue1, collected_data_ue2
-    data = request.json
-    message = data['message']
-    # print(f'message = {message}')
-
-    # 提取數據部分
-    parts = message.split(' ')
-    total_data = int(parts[1][:-1])  # 移除 'K' 並轉換為整數
-    send_netns = parts[3][:-1]  # ue1 or ue2
-    duration = float(parts[5])  # 轉換為浮點數
-    # print(f'total_data = {total_data}, send_netns = {send_netns}, duration = {duration}')
-
-    if send_netns == "ue1":
-        collected_data_ue1.append((total_data, send_netns, duration))
-        # print("collected_data_ue1")
-    elif send_netns == "ue2":
-        collected_data_ue2.append((total_data, send_netns, duration))
-        # print("collected_data_ue2")
-
-    return jsonify({"status": "Message received"}), 200
+    def plot_flag_detect(self):
+        return self.plot_flag
 
 
 # ### Kpm Report log reader
@@ -541,91 +787,118 @@ import time
 import subprocess
 import json
 
-def find_latest_log_file(base_pattern, pattern):
-    directories = glob.glob(base_pattern) 
-    for directory in directories:
-        log_files = f"{directory}/{pattern}"
-        print(f'log_files = {log_files}')
-        return log_files
 
-def extract_kpm_report_data(log_line):
-    dl_bytes_list = []
-    try:
-        print("Finding KpmReport in the log...")
-        outer_log = json.loads(log_line)  # 解析外层 JSON
-        inner_log = json.loads(outer_log['log'])  # 解析内层 JSON
+class KpmReportLogReader:
+    def __init__(self):
+        self.base_pattern = "/var/log/pods/ricxapp_ricxapp-nexran-*"
+        self.file_pattern = "nexran-xapp/0.log"
+        self.dl_bytes_list = []
+        self.temp_epoch = -1
+        self.iperf_server = IperfServer()
+        self.method_scheduler = Scheduler()
 
-        if 'KpmReport' in inner_log['msg']:
-            print("KpmReport found, processing data...")
-            ue_data_pattern = re.compile(r'ue\[(\d+)\]=\{([^}]+)\}')  # 匹配 UE 数据
-            matches = ue_data_pattern.finditer(inner_log['msg'])
-            for match in matches:
-                ue_index = match.group(1)
-                ue_contents = match.group(2)
-                dl_bytes = re.search(r'dl_bytes=(\d+)', ue_contents)
-                dl_prbs = re.search(r'dl_prbs=(\d+)', ue_contents)
-                if dl_bytes and dl_prbs:
-                    dl_bytes_list.append(int(dl_bytes.group(1)))
-                    # print(f"UE[{ue_index}] dl_bytes: {dl_bytes.group(1)}, dl_prbs: {dl_prbs.group(1)}")
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
-    except KeyError as e:
-        print(f"Key error: {e}")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
         
-    # dl_bytes_list[0], dl_bytes_list[1] = dl_bytes_list[1], dl_bytes_list[0]
-    return dl_bytes_list
+    def _find_latest_log_file(self, base_pattern, pattern):
+        ''' find log from (base_pattern + pattern) file'''
+        directories = glob.glob(base_pattern) 
+        for directory in directories:
+            log_files = f"{directory}/{pattern}"
+            # print(f'log_files = {log_files}')
+            return log_files
 
-def follow_log_file(log_file_path):
-    try:
-        agent = DQNAgent()
+    def _follow_log_file(self, log_file_path):
         process = subprocess.Popen(['tail', '-F', log_file_path], stdout=subprocess.PIPE, text=True)
         print("Starting to follow the log file...")
-        while True:
-            line = process.stdout.readline()  # 使用 readline 读取一行输出
-            if not line:
-                continue  # 如果没有读到数据，继续等待
 
-            try:
-                log_data = json.loads(line)
-                log_message = json.loads(log_data['log'])
-                if 'KpmReport' in log_message['msg']:
-                    report_data = extract_kpm_report_data(line.strip())
-                    # print(f"report_data = {report_data}")
-                    total_collected_data = collect_and_display()
-                    # print(f"total_collected_data = {total_collected_data}")                  
-                    action = agent.train(report_data, total_collected_data)
-                    # action = agent.inference(report_data, total_collected_data)
-                    put_to_nexran_xapp_fast(action[0])
-                    put_to_nexran_xapp_slow(action[1])
-
-            except json.JSONDecodeError:
-                pass
-                # print("Error decoding JSON from log.")
-            except Exception as e:
-                # pass
-                print(f"Error processing log line: {e}")
-
-    except Exception as e:
-        print(f"Error following the log file: {e}")
-    finally:
-        if process:
+        try:
+            while True:
+                line = self._read_log_line(process)
+                if line:
+                    self._handle_log_line(line)
+        except Exception as e:
+            print(f"Error following the log file: {e}")
+        finally:
             process.terminate()
             print("Stopped following the log file.")
 
+    def _read_log_line(self, process):
+        ''' read log from xApp'''
+        line = process.stdout.readline()
+        return line.strip() if line else None
 
-def log_file_thread():
-    base_pattern = "/var/log/pods/ricxapp_ricxapp-nexran-*"
-    file_pattern = "nexran-xapp/0.log"
-    while True:
-        latest_log_file = find_latest_log_file(base_pattern, file_pattern)
-        # latest_log_file = "log_test.log"
-        if latest_log_file:
-            follow_log_file(latest_log_file)
+    def _handle_log_line(self, line):
+        ''' find log with 'KpmReport' line '''
+        try:
+            log_data = json.loads(line)
+            log_message = json.loads(log_data['log'])
+            if 'KpmReport' in log_message['msg']:
+                # print(log_message)
+                self._collect_all_data(log_message)
+        except json.JSONDecodeError:
+            # Handle JSON decode errors if needed
+            pass
+        except Exception as e:
+            print(f"Error processing log line: {e}")
+
+    def _collect_all_data(self, log_message):
+        if self.iperf_server.detect_streaming_restart():
+            if(self.temp_epoch == self.method_scheduler.epoch):
+                print("next_epoch start")
+                self.method_scheduler.next_epoch()
+            self.iperf_server.next_epoch_flag = False
+        elif self.iperf_server.plot_flag_detect():
+            if(self.temp_epoch != self.method_scheduler.epoch):
+                print("plot_flag start")
+                self.method_scheduler.store_plot()
+                self.temp_epoch = self.method_scheduler.epoch
+            self.iperf_server.plot_flag = False
         else:
-            print("No log file found. Please check xApp")
-            time.sleep(5)
+            KpmReport_data = self._extract_kpm_report_data(log_message)
+            # print(f"report_data = {KpmReport_data}")
+            iperf_collected_data = self.iperf_server.collect_iperf_data()
+            # print(f"total_collected_data = {iperf_collected_data}")
+            if(self.method_scheduler.init_state_dont_store >= 5):
+                self.method_scheduler.run(KpmReport_data, iperf_collected_data)
+            self.method_scheduler.init_state_dont_store += 1
+        
+    def _extract_kpm_report_data(self, log_line):
+        ''' extract data with dl_bytes '''
+        try:
+            self.dl_bytes_list = []
+            print("Finding KpmReport in the log...")
+
+            if 'KpmReport' in log_line['msg']:
+                # print("KpmReport found, processing data...")
+                ue_data_pattern = re.compile(r'ue\[(\d+)\]=\{([^}]+)\}')  # 匹配 UE 數據
+                matches = ue_data_pattern.finditer(log_line['msg'])
+                for match in matches:
+                    ue_index = match.group(1)
+                    ue_contents = match.group(2)
+                    dl_bytes = re.search(r'dl_bytes=(\d+)', ue_contents)
+                    dl_prbs = re.search(r'dl_prbs=(\d+)', ue_contents)
+                    if dl_bytes and dl_prbs:
+                        self.dl_bytes_list.append(int(dl_bytes.group(1)))
+                        # print(f"UE[{ue_index}] dl_bytes: {dl_bytes.group(1)}, dl_prbs: {dl_prbs.group(1)}")
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON: {e}")
+        except KeyError as e:
+            print(f"Key error: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            
+        self.dl_bytes_list[0], self.dl_bytes_list[1] = self.dl_bytes_list[1], self.dl_bytes_list[0]
+        
+        return self.dl_bytes_list
+
+    def log_file_thread(self):
+        while True:
+            latest_log_file = self._find_latest_log_file(self.base_pattern, self.file_pattern)
+            # latest_log_file = "log_test.log"
+            if latest_log_file:
+                self._follow_log_file(latest_log_file)
+            else:
+                print("No log file found. Please check xApp")
+                time.sleep(5)
 
 
 # ### main function
@@ -635,19 +908,46 @@ def log_file_thread():
 
 if __name__ == '__main__': 
     
-    global_PacketLoss = []
-    global_streaming_datasize = []
-    global_KpmReport_data = []
-    global_slice = []
+    xapp_log_reader = KpmReportLogReader()   
     
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
     
-    log_thread = threading.Thread(target=log_file_thread)
+    log_thread = threading.Thread(target=xapp_log_reader.log_file_thread)
     log_thread.start()
     
-    collection_thread = threading.Thread(target=collect_and_display)
-    collection_thread.start()
+    @app.route('/A1message', methods=['POST'])
+    def receive_message():
+        ''' message = {}'''
+        data = request.json
+        message = data['message']
+        # print(f'data = {message}')
+        
+        if(message == "restart streaming server"):
+            print("restart streaming server")
+            xapp_log_reader.iperf_server.next_epoch_flag = True
+            return jsonify({"status": "Message received"}), 200
+        
+        if(message == "wait for packet end"):
+            print("wait for packet end")
+            xapp_log_reader.iperf_server.plot_flag = True
+            return jsonify({"status": "Message received"}), 200
 
-    app.run(port=1212, debug=True, use_reloader=False)
+        # 提取數據部分
+        parts = message.split(' ')
+        total_data = int(parts[1][:-1])  # 移除 'K' 並轉換為整數
+        send_netns = parts[3][:-1]  # ue1 or ue2
+        duration = float(parts[5])  # 轉換為浮點數
+        # print(f'total_data = {total_data}, send_netns = {send_netns}, duration = {duration}')
+
+        if send_netns == "ue1":
+            xapp_log_reader.iperf_server.iperf_temp_data_ue1.append((total_data, send_netns, duration))
+            # print("iperf_temp_data_ue1")
+        elif send_netns == "ue2":
+            xapp_log_reader.iperf_server.iperf_temp_data_ue2.append((total_data, send_netns, duration))
+            # print("iperf_temp_data_ue1")
+
+        return jsonify({"status": "Message received"}), 200
+    
+    app.run(host="0.0.0.0", port=1212, debug=True, use_reloader=False)
 
